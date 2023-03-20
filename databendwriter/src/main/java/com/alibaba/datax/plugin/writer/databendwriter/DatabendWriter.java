@@ -1,12 +1,15 @@
 package com.alibaba.datax.plugin.writer.databendwriter;
 
 import com.alibaba.datax.common.element.Column;
+import com.alibaba.datax.common.element.Record;
 import com.alibaba.datax.common.element.StringColumn;
 import com.alibaba.datax.common.exception.CommonErrorCode;
 import com.alibaba.datax.common.exception.DataXException;
 import com.alibaba.datax.common.plugin.RecordReceiver;
 import com.alibaba.datax.common.spi.Writer;
 import com.alibaba.datax.common.util.Configuration;
+import com.alibaba.datax.plugin.rdbms.util.DBUtil;
+import com.alibaba.datax.plugin.rdbms.util.DBUtilErrorCode;
 import com.alibaba.datax.plugin.rdbms.util.DataBaseType;
 import com.alibaba.datax.plugin.rdbms.writer.CommonRdbmsWriter;
 import com.alibaba.datax.plugin.writer.databendwriter.util.DatabendWriterUtil;
@@ -216,6 +219,31 @@ public class DatabendWriter extends Writer
                         } else {
                             throw e;
                         }
+                    }
+                }
+                @Override
+                protected void doBatchInsert(Connection connection, List<Record> buffer)
+                        throws SQLException {
+                    PreparedStatement preparedStatement = null;
+                    try {
+                        connection.setAutoCommit(false);
+                        preparedStatement = connection
+                                .prepareStatement(this.writeRecordSql);
+
+                        for (Record record : buffer) {
+                            preparedStatement = fillPreparedStatement(
+                                    preparedStatement, record);
+                            preparedStatement.addBatch();
+                        }
+                        preparedStatement.executeBatch();
+                        connection.commit();
+                    } catch (SQLException e) {
+                        LOG.warn("程序异常， 因为:" + e.getMessage());
+                    } catch (Exception e) {
+                        throw DataXException.asDataXException(
+                                DBUtilErrorCode.WRITE_DATA_ERROR, e);
+                    } finally {
+                        DBUtil.closeDBResources(preparedStatement, null);
                     }
                 }
 
